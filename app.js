@@ -294,6 +294,12 @@ async function unlockVault() {
   errEl.textContent = '';
 
   if (!email || !pass) { errEl.textContent = 'Email dan Master Password wajib diisi.'; return; }
+  
+  // Cek apakah library Firebase sudah termuat
+  if (!window.firebaseFunctions) {
+    errEl.textContent = 'Sistem autentikasi belum siap. Coba refresh halaman.';
+    return;
+  }
 
   const meta = await dbGet('meta');
   const { createUserWithEmailAndPassword, signInWithEmailAndPassword } = window.firebaseFunctions;
@@ -645,7 +651,8 @@ function generatePassphrase() {
 // ---------- TOTP ----------
 function generateTotpSecret() {
   try {
-    const secret = otplib.authenticator.generateSecret();
+    // Menggunakan API standar otplib v13
+    const secret = otplib.generateSecret();
     document.getElementById('in-totp').value = secret;
     showToast('Secret TOTP dibuat. Simpan di authenticator app Anda.');
     previewTotp();
@@ -659,7 +666,8 @@ async function previewTotp() {
   const previewEl = document.getElementById('totp-preview');
   if (!secret) { previewEl.style.display = 'none'; return; }
   try {
-    const code = otplib.authenticator.generate(secret);
+    // otplib v13 menggunakan async generate()
+    const code = await otplib.generate({ secret });
     previewEl.innerHTML = `
       <div class="totp-container">
         <span class="totp-code">${code}</span>
