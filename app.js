@@ -221,11 +221,6 @@ async function checkSetup() {
     document.getElementById('lock-sub').textContent = 'Tentukan password utama untuk mengenkripsi brankas Anda';
     document.getElementById('confirm-group').style.display = 'block';
     document.getElementById('unlock-btn-text').textContent = 'Buat Brankas';
-  } else {
-    document.getElementById('lock-title').textContent = 'VaultGuard';
-    document.getElementById('lock-sub').textContent = 'Brankas password terenkripsi Anda';
-    document.getElementById('confirm-group').style.display = 'none';
-    document.getElementById('unlock-btn-text').textContent = 'Buka Brankas';
   }
 }
 async function unlockVault() {
@@ -292,7 +287,6 @@ async function saveVault() {
   const enc = await encryptVault(vaultData, vaultKey);
   await dbSet('vault', enc);
 }
-
 // ---------- RENDER ----------
 function debouncedSearch() {
   clearTimeout(searchDebounce);
@@ -525,11 +519,10 @@ function generatePassphrase() {
   updateStrengthMeter();
   showToast(`Passphrase: ${pass}`);
 }
-
 // ---------- TOTP ----------
 function generateTotpSecret() {
   try {
-    const secret = otplib.authenticator.generateSecret();
+    const secret = otplib.generateSecret();
     document.getElementById('in-totp').value = secret;
     showToast('Secret TOTP dibuat. Simpan di authenticator app Anda.');
     previewTotp();
@@ -542,7 +535,7 @@ async function previewTotp() {
   const previewEl = document.getElementById('totp-preview');
   if (!secret) { previewEl.style.display = 'none'; return; }
   try {
-    const code = otplib.authenticator.generate(secret);
+    const code = await otplib.generate({ secret });
     previewEl.innerHTML = `
       <div class="totp-container">
         <span class="totp-code">${code}</span>
@@ -563,7 +556,7 @@ async function fillAllTotp() {
     const codeEl = document.getElementById(`totp-code-${entry.id}`);
     if (!codeEl) continue;
     try {
-      const code = otplib.authenticator.generate(entry.totpSecret);
+      const code = await otplib.generate({ secret: entry.totpSecret });
       codeEl.textContent = code;
       totpCache.set(entry.id, code);
     } catch (e) {
@@ -589,7 +582,7 @@ async function copyTotp(entryId) {
   }
 }
 function startTotpTicker() {
-  setInterval(() => {
+  setInterval(async () => {
     const entries = vaultData.filter(e => e.totpSecret);
     for (const entry of entries) {
       const codeEl = document.getElementById(`totp-code-${entry.id}`);
@@ -597,7 +590,7 @@ function startTotpTicker() {
       const barEl = document.getElementById(`totp-bar-${entry.id}`);
       if (!codeEl || !timerEl || !barEl) continue;
       try {
-        const code = otplib.authenticator.generate(entry.totpSecret);
+        const code = await otplib.generate({ secret: entry.totpSecret });
         const remaining = totpSecondsRemaining();
         const pct = (remaining / 30) * 100;
         if (codeEl.textContent !== code) {
@@ -627,7 +620,7 @@ async function saveEntry() {
   if (!site || !pass) { showToast('Nama situs dan password wajib diisi!', 'error'); return; }
   if (totpSecret) {
     try {
-      otplib.authenticator.generate(totpSecret);
+      await otplib.generate({ secret: totpSecret });
     } catch (e) {
       showToast('Secret TOTP tidak valid. Periksa format Base32.', 'error');
       return;
@@ -826,10 +819,6 @@ document.addEventListener('keydown', e => {
 window.addEventListener('load', () => {
   initTheme();
   checkSetup();
-  // ---------- INIT ----------
-window.addEventListener('load', () => {
-  initTheme();
-  checkSetup();
 
   // --- DAFTARKAN SERVICE WORKER (FITUR PWA) ---
   if ('serviceWorker' in navigator) {
@@ -837,5 +826,4 @@ window.addEventListener('load', () => {
       .then(() => console.log('PWA Service Worker Berhasil Didaftarkan!'))
       .catch((err) => console.log('PWA Gagal:', err));
   }
-});
 });
