@@ -1,10 +1,12 @@
-const CACHE_NAME = 'kelapahijau-v7';
+const CACHE_NAME = 'kelapahijau-v8'; // Naikkan versi ini (misal dari v7 ke v8)
 const ASSETS = [
   '/',
   '/index.html',
   '/style.css',
   '/app.js',
   '/manifest.json',
+  '/icon-192x192.png', // <-- Tambahkan ini
+  '/icon-512x512.png', // <-- Tambahkan ini
   'https://cdn.jsdelivr.net/npm/otplib/dist/index.global.js'
 ];
 
