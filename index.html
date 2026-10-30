@@ -84,7 +84,6 @@
     <button class="nav-item" data-filter="old">
       <span class="icon" aria-hidden="true">⏰</span> Lama (&gt;1 thn)
     </button>
-    
     <div class="sidebar-footer">
       <div class="security-score">
         <div class="label">Security Score</div>
@@ -94,14 +93,6 @@
         </div>
         <div class="score-bar"><div class="score-bar-fill" id="score-bar"></div></div>
       </div>
-      <button class="toolbar-btn" onclick="openChangePassModal()" style="width: 100%; margin-bottom: 8px; justify-content: center; border-color: var(--border);">
-        <span aria-hidden="true">🔑</span> Ganti Master Pass
-      </button>
-      <button class="btn-lock" onclick="lockVault()">
-        <span aria-hidden="true">🔒</span> Kunci Brankas
-      </button>
-    </div>
-  </aside>
       <button class="btn-lock" onclick="lockVault()">
         <span aria-hidden="true">🔒</span> Kunci Brankas
       </button>
@@ -243,35 +234,7 @@
     </div>
   </div>
 </div>
-<!-- MODAL GANTI MASTER PASSWORD -->
-<div class="modal-overlay" id="change-pass-modal" role="dialog" aria-modal="true" aria-labelledby="change-pass-title">
-  <div class="modal">
-    <div class="modal-header">
-      <h3 id="change-pass-title">Ganti Master Password</h3>
-      <button class="icon-btn" onclick="closeChangePassModal()" aria-label="Tutup">✕</button>
-    </div>
-    
-    <div class="input-group">
-      <label for="old-pass">Master Password Saat Ini</label>
-      <input type="password" id="old-pass" placeholder="Masukkan password lama...">
-    </div>
-    <div class="input-group">
-      <label for="new-pass">Master Password Baru</label>
-      <input type="password" id="new-pass" placeholder="Minimal 8 karakter...">
-    </div>
-    <div class="input-group">
-      <label for="confirm-new-pass">Konfirmasi Password Baru</label>
-      <input type="password" id="confirm-new-pass" placeholder="Ulangi password baru...">
-    </div>
-    
-    <div class="auth-error" id="change-pass-error" style="margin-bottom: 10px;"></div>
 
-    <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeChangePassModal()">Batal</button>
-      <button class="btn-save" onclick="changeMasterPassword()">🔑 Simpan Password Baru</button>
-    </div>
-  </div>
-</div>
 <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
 <div class="idle-warning" id="idle-warning" role="alert">⏱️ Brankas akan terkunci dalam 30 detik...</div>
 
