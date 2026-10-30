@@ -713,7 +713,7 @@ async function exportVault() {
    const now = new Date();
    const dateStr = now.toISOString().slice(0,10);
    const timeStr = now.toTimeString().slice(0,8).replace(/:/g, '-');
-   a.download = `vaultguard-${dateStr}_${timeStr}.vgvault`;
+   a.download = `kelapahijau-${dateStr}_${timeStr}.vgvault`;
   a.click();
   URL.revokeObjectURL(url);
   showToast('Vault diexport (terenkripsi)');
