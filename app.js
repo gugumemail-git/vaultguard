@@ -814,7 +814,90 @@ document.addEventListener('keydown', e => {
     lockVault();
   }
 });
+// ============================================================
+// FITUR GANTI MASTER PASSWORD
+// ============================================================
 
+function openChangePassModal() {
+  document.getElementById('old-pass').value = '';
+  document.getElementById('new-pass').value = '';
+  document.getElementById('confirm-new-pass').value = '';
+  document.getElementById('change-pass-error').textContent = '';
+  document.getElementById('change-pass-modal').classList.add('open');
+}
+
+function closeChangePassModal() {
+  document.getElementById('change-pass-modal').classList.remove('open');
+}
+
+async function changeMasterPassword() {
+  const oldPass = document.getElementById('old-pass').value;
+  const newPass = document.getElementById('new-pass').value;
+  const confirmPass = document.getElementById('confirm-new-pass').value;
+  const errEl = document.getElementById('change-pass-error');
+
+  errEl.textContent = '';
+
+  if (!oldPass || !newPass || !confirmPass) {
+    errEl.textContent = 'Semua kolom wajib diisi!';
+    return;
+  }
+
+  if (newPass !== confirmPass) {
+    errEl.textContent = 'Konfirmasi password baru tidak cocok!';
+    return;
+  }
+
+  if (newPass.length < 8) {
+    errEl.textContent = 'Password baru minimal 8 karakter!';
+    return;
+  }
+
+  try {
+    // 1. Dapatkan meta (salt dan iterasi) yang lama
+    const meta = await dbGet('meta');
+    if (!meta) throw new Error('Data brankas tidak ditemukan.');
+
+    // 2. Buat kunci lama dan verifikasi dengan cara mendekripsi data
+    const oldSalt = b64ToBuf(meta.salt);
+    const oldKey = await deriveKey(oldPass, oldSalt, meta.iterations);
+    
+    // Ambil data terenkripsi saat ini
+    const storedData = await dbGet('vault');
+    if (!storedData) throw new Error('Vault kosong.');
+
+    let decryptedData;
+    try {
+      // Tes apakah password lama benar
+      decryptedData = await decryptVault(storedData, oldKey);
+    } catch (e) {
+      // Jika dekripsi gagal, berarti password lama salah
+      throw new Error('Master Password lama salah!');
+    }
+
+    // 3. Buat kunci baru dan salt baru
+    const newSalt = crypto.getRandomValues(new Uint8Array(16));
+    const newKey = await deriveKey(newPass, newSalt, 600000);
+
+    // 4. Enkripsi ulang data dengan kunci baru
+    const newEncryptedData = await encryptVault(decryptedData, newKey);
+
+    // 5. Simpan meta baru dan data baru ke IndexedDB
+    await dbSet('meta', { salt: bufToB64(newSalt), iterations: 600000 });
+    await dbSet('vault', newEncryptedData);
+
+    // 6. Perbarui state global (agar enkripsi selanjutnya menggunakan kunci baru)
+    vaultKey = newKey;
+    vaultSalt = newSalt;
+
+    // 7. Tutup modal dan beri notifikasi
+    closeChangePassModal();
+    showToast('✅ Master Password berhasil diubah!', 'success');
+
+  } catch (err) {
+    errEl.textContent = err.message;
+  }
+}
 // ---------- INIT ----------
 window.addEventListener('load', () => {
   initTheme();

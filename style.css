@@ -318,9 +318,9 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   transition: background 0.3s, border-color 0.3s;
 }
 .toolbar-btn {
-  padding:9px 16px; background: var(--surface-2); border:1px solid var(--border);
-  border-radius:10px; color: var(--text); font-size:13px; font-weight:600;
-  cursor:pointer; transition: all 0.2s; display:flex; align-items:center; gap:6px;
+  padding: 9px 16px; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px;
 }
 .toolbar-btn:hover { border-color: var(--accent); color: var(--accent); }
 .toolbar-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
