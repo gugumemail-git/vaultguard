@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kelapahijau-v8'; // Naikkan versi ini (misal dari v7 ke v8)
+const CACHE_NAME = 'kelapahijau-v9'; // Naikkan versi ini (misal dari v7 ke v8)
 const ASSETS = [
   '/',
   '/index.html',
