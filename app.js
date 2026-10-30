@@ -218,9 +218,9 @@ async function checkSetup() {
   const meta = await dbGet('meta');
   if (!meta) {
     document.getElementById('lock-title').textContent = 'Tanam Kelapa Hijau';
-    document.getElementById('lock-sub').textContent = 'Tentukan password utama untuk mengenkripsi brankas Anda';
+    document.getElementById('lock-sub').textContent = 'Tentukan password utama untuk membuka kelapa hijau Anda';
     document.getElementById('confirm-group').style.display = 'block';
-    document.getElementById('unlock-btn-text').textContent = 'Buat Brankas';
+    document.getElementById('unlock-btn-text').textContent = 'Tanam Kelapa Hijau';
   }
 }
 async function unlockVault() {
