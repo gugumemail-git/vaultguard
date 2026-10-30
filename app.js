@@ -710,7 +710,10 @@ async function exportVault() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `vaultguard-${new Date().toISOString().slice(0,10)}.vgvault`;
+   const now = new Date();
+   const dateStr = now.toISOString().slice(0,10);
+   const timeStr = now.toTimeString().slice(0,8).replace(/:/g, '-');
+   a.download = `vaultguard-${dateStr}_${timeStr}.vgvault`;
   a.click();
   URL.revokeObjectURL(url);
   showToast('Vault diexport (terenkripsi)');
