@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vaultguard-v2';
+const CACHE_NAME = 'kelapahijau-v5';
 const ASSETS = [
   '/',
   '/index.html',
