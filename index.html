@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- CSP KETAT: Hanya mengizinkan script dari self, inline script dihapus, dan CDN spesifik -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.pwnedpasswords.com https://cdn.jsdelivr.net; manifest-src 'self';">
+    
+    <meta name="referrer" content="no-referrer">
+    <title>VaultGuard — Secure Password Manager</title>
+    
+    <!-- PWA Meta -->
+    <meta name="theme-color" content="#0a0e1a">
+    <link rel="manifest" href="manifest.json">
+
+    <!-- External CSS -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Library TOTP (tetap dari CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/otplib/dist/index.global.js"></script>
+</head>
+<body>
+
+<!-- Theme toggle (global) -->
+<button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" aria-label="Ganti tema" title="Ganti tema (light/dark)">
+  <span id="theme-icon">🌙</span>
+</button>
+
+<!-- LOCK SCREEN -->
+<div id="lock-screen" role="main" aria-label="Layar buka brankas">
+  <div class="lock-card">
+    <div class="lock-icon" aria-hidden="true">🔐</div>
+    <h1 id="lock-title">VaultGuard</h1>
+    <p id="lock-sub">Brankas password terenkripsi Anda</p>
+    <div class="input-group">
+      <label for="master-pass">Master Password</label>
+      <input type="password" id="master-pass" placeholder="Masukkan master password" autocomplete="off" aria-required="true">
+      <button class="toggle-eye" onclick="toggleMasterPass(this)" aria-label="Tampilkan/sembunyikan password">👁</button>
+    </div>
+    <div class="input-group" id="confirm-group" style="display:none;">
+      <label for="confirm-pass">Konfirmasi Master Password</label>
+      <input type="password" id="confirm-pass" placeholder="Ulangi master password" autocomplete="off">
+    </div>
+    <button class="btn btn-primary" id="unlock-btn" onclick="unlockVault()">
+      <span aria-hidden="true">🔓</span> <span id="unlock-btn-text">Buka Brankas</span>
+    </button>
+    <div class="auth-error" id="auth-error" role="alert"></div>
+    <div class="rate-limit-info" id="rate-limit-info" role="status"></div>
+    <div class="lock-footer">
+      <span class="dot" aria-hidden="true"></span>
+      AES-256-GCM · PBKDF2 600k · Zero-Knowledge
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <aside class="sidebar" id="sidebar" aria-label="Navigasi utama">
+    <div class="brand">
+      <div class="brand-icon" aria-hidden="true">🔐</div>
+      <div>
+        <div class="brand-name">VaultGuard</div>
+        <div class="brand-sub">AES-256 Encrypted</div>
+      </div>
+    </div>
+    <button class="nav-item active" data-filter="all">
+      <span class="icon" aria-hidden="true">🗝️</span> Semua Password
+      <span class="badge" id="nav-count">0</span>
+    </button>
+    <button class="nav-item" data-filter="favorite">
+      <span class="icon" aria-hidden="true">⭐</span> Favorit
+    </button>
+    <button class="nav-item" data-filter="strong">
+      <span class="icon" aria-hidden="true">🛡️</span> Kuat
+    </button>
+    <button class="nav-item" data-filter="weak">
+      <span class="icon" aria-hidden="true">⚠️</span> Lemah
+      <span class="badge" id="nav-weak">0</span>
+    </button>
+    <button class="nav-item" data-filter="duplicate">
+      <span class="icon" aria-hidden="true">🔄</span> Duplikat
+    </button>
+    <button class="nav-item" data-filter="old">
+      <span class="icon" aria-hidden="true">⏰</span> Lama (&gt;1 thn)
+    </button>
+    <div class="sidebar-footer">
+      <div class="security-score">
+        <div class="label">Security Score</div>
+        <div class="score">
+          <span class="score-num" id="score-num">100</span>
+          <span class="score-total">/100</span>
+        </div>
+        <div class="score-bar"><div class="score-bar-fill" id="score-bar"></div></div>
+      </div>
+      <button class="btn-lock" onclick="lockVault()">
+        <span aria-hidden="true">🔒</span> Kunci Brankas
+      </button>
+    </div>
+  </aside>
+  <div class="sidebar-backdrop" onclick="document.getElementById('sidebar').classList.remove('open')"></div>
+
+  <main class="main">
+    <div class="header">
+      <div class="header-left">
+        <button class="mobile-menu-btn" onclick="document.getElementById('sidebar').classList.toggle('open')" aria-label="Buka menu">☰</button>
+        <div>
+          <h2>Password Saya</h2>
+          <p id="header-sub">Kelola semua kredensial Anda dengan aman</p>
+        </div>
+      </div>
+      <div style="display:flex; gap:12px; align-items:center; flex:1; justify-content:flex-end; flex-wrap:wrap;">
+        <div class="search-bar">
+          <span class="search-icon" aria-hidden="true">🔍</span>
+          <input type="text" id="search-input" placeholder="Cari password..." oninput="debouncedSearch()" aria-label="Cari password">
+        </div>
+        <button class="btn-add" onclick="openModal()">
+          <span aria-hidden="true">+</span> Tambah
+        </button>
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="icon blue" aria-hidden="true">🗝️</div>
+        <div class="value" id="stat-total">0</div>
+        <div class="label">Total Password</div>
+      </div>
+      <div class="stat-card">
+        <div class="icon green" aria-hidden="true">🛡️</div>
+        <div class="value" id="stat-strong">0</div>
+        <div class="label">Kuat</div>
+      </div>
+      <div class="stat-card">
+        <div class="icon amber" aria-hidden="true">⚠️</div>
+        <div class="value" id="stat-medium">0</div>
+        <div class="label">Sedang</div>
+      </div>
+      <div class="stat-card">
+        <div class="icon red" aria-hidden="true">🚨</div>
+        <div class="value" id="stat-weak">0</div>
+        <div class="label">Lemah</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button class="toolbar-btn" onclick="exportVault()">📥 Export .vgvault</button>
+      <button class="toolbar-btn" onclick="document.getElementById('import-file').click()">📤 Import .vgvault</button>
+      <input type="file" id="import-file" accept=".vgvault,.json" style="display:none" onchange="importVault(event)">
+      <button class="toolbar-btn" onclick="document.getElementById('csv-file').click()">📊 Import CSV</button>
+      <input type="file" id="csv-file" accept=".csv" style="display:none" onchange="importCSV(event)">
+      <button class="toolbar-btn" onclick="checkAllBreaches()">🛡️ Cek Breach (HIBP)</button>
+      <button class="toolbar-btn danger" onclick="wipeVault()">🗑️ Hapus Semua</button>
+    </div>
+
+    <div class="list-header">
+      <h3 id="list-title">Kredensial Tersimpan</h3>
+      <span class="count" id="list-count">0 item</span>
+    </div>
+    <div class="password-list" id="password-list"></div>
+  </main>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">Tambah Password Baru</h3>
+      <button class="icon-btn" onclick="closeModal()" aria-label="Tutup">✕</button>
+    </div>
+    <div class="input-group">
+      <label for="in-site">Nama Situs / Layanan</label>
+      <input type="text" id="in-site" placeholder="Contoh: GitHub, Gmail, Netflix">
+    </div>
+    <div class="input-group">
+      <label for="in-link">Link URL (opsional)</label>
+      <input type="text" id="in-link" placeholder="https://example.com">
+    </div>
+    <div class="input-group">
+      <label for="in-user">Username / Email</label>
+      <input type="text" id="in-user" placeholder="user@example.com">
+    </div>
+    <div class="input-group">
+      <label for="in-pass">Password</label>
+      <input type="text" id="in-pass" class="with-btn" placeholder="Masukkan atau generate password" oninput="updateStrengthMeter()">
+      <button class="toggle-eye" onclick="toggleModalPass(this)" aria-label="Tampilkan/sembunyikan">👁</button>
+      <div class="password-gen-row">
+        <button class="btn-gen" onclick="generatePassword(16)">⚡ 16</button>
+        <button class="btn-gen" onclick="generatePassword(24)">⚡ 24</button>
+        <button class="btn-gen" onclick="generatePassword(32)">⚡ 32</button>
+        <button class="btn-gen" onclick="generateMnemonic()">🧠 Mnemonic</button>
+        <button class="btn-gen" onclick="generatePassphrase()">📝 Passphrase</button>
+      </div>
+      <div class="gen-options">
+        <label><input type="checkbox" id="opt-symbols" checked> Simbol (!@#$)</label>
+        <label><input type="checkbox" id="opt-numbers" checked> Angka (0-9)</label>
+        <label><input type="checkbox" id="opt-upper" checked> Kapital (A-Z)</label>
+        <label><input type="checkbox" id="opt-exclude" checked> Exclude 0O1lI</label>
+      </div>
+      <div class="strength-meter" id="strength-meter">
+        <div class="strength-meter-bar">
+          <div class="strength-meter-seg" id="seg1"></div>
+          <div class="strength-meter-seg" id="seg2"></div>
+          <div class="strength-meter-seg" id="seg3"></div>
+          <div class="strength-meter-seg" id="seg4"></div>
+          <div class="strength-meter-seg" id="seg5"></div>
+        </div>
+        <div class="strength-meter-info">
+          <span>Kekuatan: <strong id="strength-label">—</strong></span>
+          <span>Entropy: <strong id="entropy-label">—</strong></span>
+        </div>
+      </div>
+    </div>
+    <div class="input-group">
+      <label for="in-tags">Tag (pisahkan dengan koma, opsional)</label>
+      <input type="text" id="in-tags" placeholder="kerja, sosial, keuangan">
+    </div>
+    <div class="input-group">
+      <label for="in-note">Catatan (opsional)</label>
+      <input type="text" id="in-note" placeholder="No. HP, pertanyaan keamanan, dll">
+    </div>
+    <div class="input-group">
+      <label for="in-totp">TOTP Secret (opsional, untuk 2FA)</label>
+      <input type="text" id="in-totp" placeholder="Base32 secret (contoh: JBSWY3DPEHPK3PXP)">
+      <div style="margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap;">
+        <button type="button" class="btn-gen" onclick="generateTotpSecret()">🔑 Generate Secret</button>
+        <button type="button" class="btn-gen" onclick="previewTotp()">👁 Preview Kode</button>
+      </div>
+      <div id="totp-preview" style="display: none; margin-top: 8px;"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Batal</button>
+      <button class="btn-save" onclick="saveEntry()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
+<div class="idle-warning" id="idle-warning" role="alert">⏱️ Brankas akan terkunci dalam 30 detik...</div>
+
+<!-- External JS -->
+<script src="app.js"></script>
+</body>
+</html>
