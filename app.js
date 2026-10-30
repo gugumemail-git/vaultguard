@@ -1,5 +1,5 @@
 // ============================================================
-// VaultGuard v3 — Tema, TOTP, HIBP, history
+// VaultGuard v3 — Tema, TOTP, HIBP, history, Firebase Sync
 // ============================================================
 
 // ---------- THEME ----------
@@ -42,6 +42,62 @@ const MAX_ATTEMPTS = 5;
 const BASE_LOCKOUT = 30 * 1000;
 const totpCache = new Map();
 let totpTickerStarted = false;
+
+// ---------- FIREBASE STATE ----------
+let currentUser = null;
+
+// ---------- FIREBASE FUNCTIONS ----------
+function initFirebaseAuth() {
+  if (!window.firebaseAuth) {
+    console.warn("Firebase belum siap. Pastikan script SDK sudah dimuat di index.html");
+    return;
+  }
+  const { onAuthStateChanged } = window.firebaseFunctions;
+  const auth = window.firebaseAuth;
+  
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      currentUser = user;
+      console.log("Sudah login sebagai:", user.email);
+    } else {
+      currentUser = null;
+      console.log("Belum login.");
+    }
+  });
+}
+
+async function saveToFirestore(encryptedData) {
+  if (!currentUser) return;
+  const { doc, setDoc } = window.firebaseFunctions;
+  const db = window.firebaseDb;
+  
+  try {
+    await setDoc(doc(db, "vaults", currentUser.uid), {
+      data: encryptedData,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error("Firestore Save Error:", e);
+    showToast("Gagal sinkronisasi ke Cloud", "error");
+  }
+}
+
+async function loadFromFirestore() {
+  if (!currentUser) return null;
+  const { doc, getDoc } = window.firebaseFunctions;
+  const db = window.firebaseDb;
+  
+  try {
+    const docSnap = await getDoc(doc(db, "vaults", currentUser.uid));
+    if (docSnap.exists()) {
+      return docSnap.data().data; 
+    }
+    return null;
+  } catch (e) {
+    console.error("Firestore Load Error:", e);
+    return null;
+  }
+}
 
 // ---------- INDEXEDDB ----------
 const DB_NAME = 'vaultguard-db';
@@ -212,7 +268,6 @@ function recordFailure() {
   }
 }
 function resetFailures() { failedAttempts = 0; lockoutUntil = 0; }
-
 // ---------- AUTH ----------
 async function checkSetup() {
   const meta = await dbGet('meta');
@@ -221,45 +276,91 @@ async function checkSetup() {
     document.getElementById('lock-sub').textContent = 'Tentukan password utama untuk membuka kelapa hijau Anda';
     document.getElementById('confirm-group').style.display = 'block';
     document.getElementById('unlock-btn-text').textContent = 'Tanam Kelapa Hijau';
+  } else {
+    document.getElementById('lock-title').textContent = 'Kelapa Hijau';
+    document.getElementById('lock-sub').textContent = 'Brankas password terenkripsi Anda';
+    document.getElementById('confirm-group').style.display = 'none';
+    document.getElementById('unlock-btn-text').textContent = 'Buka Brankas';
   }
 }
+
 async function unlockVault() {
   if (isLockedOut()) { document.getElementById('auth-error').textContent = 'Terkunci sementara. Tunggu.'; return; }
+  
+  const email = document.getElementById('master-email').value.trim();
   const pass = document.getElementById('master-pass').value;
+  const confirmPass = document.getElementById('confirm-pass').value;
   const errEl = document.getElementById('auth-error');
   errEl.textContent = '';
-  if (!pass) { errEl.textContent = 'Master password wajib diisi.'; return; }
+
+  if (!email || !pass) { errEl.textContent = 'Email dan Master Password wajib diisi.'; return; }
+
   const meta = await dbGet('meta');
+  const { createUserWithEmailAndPassword, signInWithEmailAndPassword } = window.firebaseFunctions;
+  const auth = window.firebaseAuth;
+
+  // SKENARIO 1: Belum ada data lokal -> Daftar Akun Baru
   if (!meta) {
-    const confirm = document.getElementById('confirm-pass').value;
-    if (pass !== confirm) { errEl.textContent = 'Konfirmasi tidak cocok!'; return; }
+    if (pass !== confirmPass) { errEl.textContent = 'Konfirmasi tidak cocok!'; return; }
     if (pass.length < 8) { errEl.textContent = 'Minimal 8 karakter.'; return; }
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    vaultSalt = salt;
-    vaultKey = await deriveKey(pass, salt);
-    vaultData = [];
-    await dbSet('meta', { salt: bufToB64(salt), iterations: 600000 });
-    await saveVault();
-    showApp();
-    showToast('Brankas berhasil dibuat');
+    
+    try {
+      // Daftarkan ke Firebase
+      const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+      const user = userCredential.user;
+      
+      // Buat kunci enkripsi dari Master Password
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      vaultSalt = salt;
+      vaultKey = await deriveKey(pass, salt);
+      vaultData = [];
+      
+      // Simpan metadata (salt & iterasi) ke lokal
+      await dbSet('meta', { salt: bufToB64(salt), iterations: 600000 });
+      await saveVault(); 
+      
+      showApp();
+      showToast('Akun dan Brankas berhasil dibuat');
+    } catch (error) {
+      if (error.code === 'auth/email-already-in-use') {
+        errEl.textContent = 'Email sudah terdaftar. Silakan gunakan email lain atau login.';
+      } else {
+        errEl.textContent = 'Gagal mendaftar: ' + error.message;
+      }
+    }
     return;
   }
+
+  // SKENARIO 2: Sudah ada data lokal -> Login
   try {
+    // Login ke Firebase
+    await signInWithEmailAndPassword(auth, email, pass);
+    
+    // Turunkan kunci dan dekripsi data
     vaultSalt = b64ToBuf(meta.salt);
     vaultKey = await deriveKey(pass, vaultSalt, meta.iterations);
-    const stored = await dbGet('vault');
+    
+    let stored = await dbGet('vault');
+    // Jika data lokal kosong, coba ambil dari Firestore
+    if (!stored && currentUser) {
+      stored = await loadFromFirestore();
+      if (stored) await dbSet('vault', stored);
+    }
+    
     vaultData = stored ? await decryptVault(stored, vaultKey) : [];
     resetFailures();
     showApp();
     showToast('Brankas berhasil dibuka');
   } catch (e) {
     recordFailure();
-    errEl.textContent = 'Master password salah.';
+    errEl.textContent = 'Email atau Master Password salah.';
   }
 }
+
 function showApp() {
   document.getElementById('lock-screen').classList.add('hidden');
   document.getElementById('app').classList.add('visible');
+  document.getElementById('master-email').value = '';
   document.getElementById('master-pass').value = '';
   document.getElementById('confirm-pass').value = '';
   document.getElementById('rate-limit-info').textContent = '';
@@ -270,6 +371,7 @@ function showApp() {
     totpTickerStarted = true;
   }
 }
+
 function lockVault() {
   vaultKey = null;
   vaultData = [];
@@ -282,16 +384,26 @@ function lockVault() {
   document.getElementById('sidebar').classList.remove('open');
   closeModal();
 }
+
 async function saveVault() {
   if (!vaultKey) return;
   const enc = await encryptVault(vaultData, vaultKey);
+  
+  // Selalu simpan ke lokal
   await dbSet('vault', enc);
+  
+  // Sinkronkan ke Firebase jika memungkinkan
+  if (currentUser) {
+    await saveToFirestore(enc);
+  }
 }
+
 // ---------- RENDER ----------
 function debouncedSearch() {
   clearTimeout(searchDebounce);
   searchDebounce = setTimeout(renderList, 200);
 }
+
 function renderList() {
   const query = (document.getElementById('search-input').value || '').toLowerCase();
   const listEl = document.getElementById('password-list');
@@ -390,6 +502,7 @@ function renderList() {
   }).join('');
   fillAllTotp();
 }
+
 function getInitials(site) {
   return (site || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 }
@@ -402,6 +515,7 @@ async function toggleFavorite(id) {
   await saveVault();
   renderList();
 }
+
 async function copyPass(id) {
   const e = vaultData.find(x => x.id === id);
   if (!e) return;
@@ -417,6 +531,7 @@ async function copyPass(id) {
     }, 30000);
   } catch { showToast('Gagal menyalin', 'error'); }
 }
+
 async function deleteEntry(id) {
   const e = vaultData.find(x => x.id === id);
   if (!e) return;
@@ -440,6 +555,7 @@ function openModal(editId = null) {
   document.getElementById('modal').classList.add('open');
   document.getElementById('in-site').focus();
 }
+
 function editEntry(id) {
   const e = vaultData.find(x => x.id === id);
   if (!e) return;
@@ -454,15 +570,18 @@ function editEntry(id) {
   openModal(id);
   if (e.totpSecret) previewTotp();
 }
+
 function closeModal() {
   document.getElementById('modal').classList.remove('open');
   editingId = null;
 }
+
 function toggleMasterPass(btn) {
   const input = btn.previousElementSibling;
   input.type = input.type === 'password' ? 'text' : 'password';
   btn.textContent = input.type === 'password' ? '👁' : '🙈';
 }
+
 function toggleModalPass(btn) {
   const input = btn.previousElementSibling;
   input.type = input.type === 'password' ? 'text' : 'password';
@@ -484,6 +603,7 @@ function generatePassword(len) {
   document.getElementById('in-pass').type = 'text';
   updateStrengthMeter();
 }
+
 const MNEMONIC_THEMES = {
   space: ['Andromeda','Supernova','Exoplanet','Telescope','Asteroid','BlackHole','LightYear','Nebula','Satellite','Quantum'],
   geo: ['Himalaya','Amazonas','Reykjavik','Patagonia','Santorini','Madagascar','Zambezi','Kyoto','Gibraltar','Everest'],
@@ -491,6 +611,7 @@ const MNEMONIC_THEMES = {
   food: ['Espresso','Croissant','Guacamole','Tiramisu','Kimchi','Rendang','Mozzarella','Macarons','Teriyaki','Paella'],
   history: ['Parthenon','Colosseum','TajMahal','MachuPicchu','Pyramids','Stonehenge','Acropolis','Pantheon','Babylon','Alexandria']
 };
+
 function generateMnemonic() {
   const themes = Object.keys(MNEMONIC_THEMES);
   const theme = themes[Math.floor(Math.random() * themes.length)];
@@ -506,7 +627,9 @@ function generateMnemonic() {
   updateStrengthMeter();
   showToast(`Mnemonic (${theme}): ${base.slice(0, 20)}`);
 }
+
 const PASSPHRASE_WORDS = ['correct','horse','battery','staple','forest','ocean','mountain','river','cloud','thunder','silent','bright','shadow','crystal','ancient','modern','purple','golden','silver','copper','amber','violet','orange','crimson','azure','emerald','scarlet','ivory','obsidian','marble'];
+
 function generatePassphrase() {
   const arr = new Uint32Array(5);
   crypto.getRandomValues(arr);
@@ -522,7 +645,7 @@ function generatePassphrase() {
 // ---------- TOTP ----------
 function generateTotpSecret() {
   try {
-    const secret = otplib.generateSecret();
+    const secret = otplib.authenticator.generateSecret();
     document.getElementById('in-totp').value = secret;
     showToast('Secret TOTP dibuat. Simpan di authenticator app Anda.');
     previewTotp();
@@ -530,12 +653,13 @@ function generateTotpSecret() {
     showToast('Gagal generate secret: ' + e.message, 'error');
   }
 }
+
 async function previewTotp() {
   const secret = document.getElementById('in-totp').value.trim();
   const previewEl = document.getElementById('totp-preview');
   if (!secret) { previewEl.style.display = 'none'; return; }
   try {
-    const code = await otplib.generate({ secret });
+    const code = otplib.authenticator.generate(secret);
     previewEl.innerHTML = `
       <div class="totp-container">
         <span class="totp-code">${code}</span>
@@ -548,9 +672,11 @@ async function previewTotp() {
     showToast('Secret TOTP tidak valid. Pastikan format Base32.', 'error');
   }
 }
+
 function totpSecondsRemaining() {
   return 30 - (Math.floor(Date.now() / 1000) % 30);
 }
+
 async function fillAllTotp() {
   for (const entry of vaultData.filter(e => e.totpSecret)) {
     const codeEl = document.getElementById(`totp-code-${entry.id}`);
@@ -565,6 +691,7 @@ async function fillAllTotp() {
     }
   }
 }
+
 async function copyTotp(entryId) {
   const code = totpCache.get(entryId);
   if (!code) { showToast('Kode TOTP belum siap', 'warn'); return; }
@@ -581,6 +708,7 @@ async function copyTotp(entryId) {
     showToast('Gagal menyalin', 'error');
   }
 }
+
 function startTotpTicker() {
   setInterval(async () => {
     const entries = vaultData.filter(e => e.totpSecret);
@@ -617,7 +745,9 @@ async function saveEntry() {
   const tagsRaw = document.getElementById('in-tags').value;
   const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
   const totpSecret = document.getElementById('in-totp').value.trim();
+  
   if (!site || !pass) { showToast('Nama situs dan password wajib diisi!', 'error'); return; }
+  
   if (totpSecret) {
     try {
       await otplib.generate({ secret: totpSecret });
@@ -626,8 +756,10 @@ async function saveEntry() {
       return;
     }
   }
+  
   const colors = ['#4f8cff','#7c3aed','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899'];
   const now = Date.now();
+  
   if (editingId) {
     const idx = vaultData.findIndex(x => x.id === editingId);
     if (idx !== -1) {
@@ -645,6 +777,7 @@ async function saveEntry() {
       favorite: false, history: []
     });
   }
+  
   await saveVault();
   closeModal();
   renderList();
@@ -656,6 +789,7 @@ async function sha1Hex(str) {
   const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
 }
+
 async function checkBreach(password) {
   try {
     const hash = await sha1Hex(password);
@@ -673,6 +807,7 @@ async function checkBreach(password) {
     return -1;
   }
 }
+
 async function checkAllBreaches() {
   if (!vaultData.length) { showToast('Tidak ada password untuk dicek', 'warn'); return; }
   showToast(`Mengecek ${vaultData.length} password di HIBP...`);
@@ -710,14 +845,15 @@ async function exportVault() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-   const now = new Date();
-   const dateStr = now.toISOString().slice(0,10);
-   const timeStr = now.toTimeString().slice(0,8).replace(/:/g, '-');
-   a.download = `kelapahijau-${dateStr}_${timeStr}.vgvault`;
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0,10);
+  const timeStr = now.toTimeString().slice(0,8).replace(/:/g, '-');
+  a.download = `kelapahijau-${dateStr}_${timeStr}.vgvault`;
   a.click();
   URL.revokeObjectURL(url);
   showToast('Vault diexport (terenkripsi)');
 }
+
 async function importVault(ev) {
   const file = ev.target.files[0];
   if (!file) return;
@@ -745,6 +881,7 @@ async function importVault(ev) {
   } catch (err) { showToast('Gagal import: ' + err.message, 'error'); }
   ev.target.value = '';
 }
+
 async function importCSV(ev) {
   const file = ev.target.files[0];
   if (!file) return;
@@ -783,6 +920,7 @@ async function importCSV(ev) {
   } catch (err) { showToast('Gagal import CSV: ' + err.message, 'error'); }
   ev.target.value = '';
 }
+
 async function wipeVault() {
   if (!confirm('HAPUS SEMUA data brankas?')) return;
   if (!confirm('Yakin? Semua password hilang permanen.')) return;
@@ -821,6 +959,7 @@ document.addEventListener('keydown', e => {
 // ---------- INIT ----------
 window.addEventListener('load', () => {
   initTheme();
+  initFirebaseAuth(); // Inisialisasi Firebase
   checkSetup();
 
   // --- DAFTARKAN SERVICE WORKER (FITUR PWA) ---

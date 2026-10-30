@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
-    <!-- CSP KETAT: Hanya mengizinkan script dari self, inline script dihapus, dan CDN spesifik -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.pwnedpasswords.com https://cdn.jsdelivr.net; manifest-src 'self'; worker-src 'self';">
+    <!-- CSP KETAT (Diperbarui untuk mengizinkan Firebase) -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.pwnedpasswords.com https://cdn.jsdelivr.net https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com; manifest-src 'self'; worker-src 'self';">
     
     <meta name="referrer" content="no-referrer">
     <title>Kelapa Hijau</title>
@@ -17,8 +17,40 @@
     <!-- External CSS -->
     <link rel="stylesheet" href="style.css">
     
-    <!-- Library TOTP (tetap dari CDN) -->
+    <!-- Library TOTP -->
     <script src="https://cdn.jsdelivr.net/npm/otplib/dist/index.global.js"></script>
+
+    <!-- Firebase SDK (Modular) - SUDAH DISESUAIKAN DENGAN KONFIGURASI ANDA -->
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+      import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
+      import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
+
+      const firebaseConfig = {
+        apiKey: "AIzaSyBBQFmBvRlqWUvGzPlrCTDNYLVu2LikO0I",
+        authDomain: "kelapa-hijau.firebaseapp.com",
+        projectId: "kelapa-hijau",
+        storageBucket: "kelapa-hijau.firebasestorage.app",
+        messagingSenderId: "205794970428",
+        appId: "1:205794970428:web:d509f3005977c4c49aac39",
+        measurementId: "G-2K2LFL35BX"
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const db = getFirestore(app);
+      
+      // Ekspos ke global window agar bisa diakses dari app.js
+      window.firebaseAuth = auth;
+      window.firebaseDb = db;
+      window.firebaseFunctions = { 
+        onAuthStateChanged, 
+        createUserWithEmailAndPassword, 
+        signInWithEmailAndPassword,
+        signOut,
+        doc, setDoc, getDoc 
+      };
+    </script>
 </head>
 <body>
 
@@ -33,6 +65,13 @@
     <div class="lock-icon" aria-hidden="true">🔐</div>
     <h1 id="lock-title">Kelapa Hijau</h1>
     <p id="lock-sub">Brankas password terenkripsi Anda</p>
+    
+    <!-- FIELD EMAIL BARU -->
+    <div class="input-group">
+      <label for="master-email">Email Akun</label>
+      <input type="email" id="master-email" placeholder="Masukkan email Anda" autocomplete="email">
+    </div>
+
     <div class="input-group">
       <label for="master-pass">Master Password</label>
       <input type="password" id="master-pass" placeholder="Masukkan master password" autocomplete="off" aria-required="true">
@@ -160,7 +199,6 @@
     <div class="password-list" id="password-list"></div>
   </main>
 </div>
-
 <!-- MODAL -->
 <div class="modal-overlay" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
   <div class="modal">

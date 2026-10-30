@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kelapahijau-v5';
+const CACHE_NAME = 'kelapahijau-v6';
 const ASSETS = [
   '/',
   '/index.html',
