@@ -72,10 +72,14 @@ async function saveToFirestore(encryptedData) {
   const db = window.firebaseDb;
   
   try {
+    // Ambil meta lokal untuk memastikan salt selalu ada di cloud
+    const localMeta = await dbGet('meta');
+    
     await setDoc(doc(db, "vaults", currentUser.uid), {
+      meta: localMeta, // <-- Simpan salt ke cloud setiap kali menyimpan
       data: encryptedData,
       updatedAt: new Date().toISOString()
-    });
+    }, { merge: true }); // merge: true agar tidak menimpa field lain
   } catch (e) {
     console.error("Firestore Save Error:", e);
     showToast("Gagal sinkronisasi ke Cloud", "error");
@@ -90,12 +94,46 @@ async function loadFromFirestore() {
   try {
     const docSnap = await getDoc(doc(db, "vaults", currentUser.uid));
     if (docSnap.exists()) {
-      return docSnap.data().data; 
+      const cloudData = docSnap.data();
+      
+      // JIKA DI CLOUD ADA META (SALT) DAN DI LOKAL KOSONG, SIMPAN KE LOKAL
+      if (cloudData.meta && !(await dbGet('meta'))) {
+        await dbSet('meta', cloudData.meta);
+        vaultSalt = b64ToBuf(cloudData.meta.salt);
+      }
+      
+      return cloudData.data; 
     }
     return null;
   } catch (e) {
     console.error("Firestore Load Error:", e);
     return null;
+  }
+}
+async function syncMetaFromCloud(email, pass) {
+  const { signInWithEmailAndPassword, doc, getDoc } = window.firebaseFunctions;
+  const auth = window.firebaseAuth;
+  const db = window.firebaseDb;
+
+  try {
+    // 1. Login ke Firebase dulu untuk mendapatkan UID
+    const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+    const user = userCredential.user;
+
+    // 2. Tarik dokumen dari Firestore
+    const docSnap = await getDoc(doc(db, "vaults", user.uid));
+    if (docSnap.exists()) {
+      const cloudData = docSnap.data();
+      if (cloudData.meta) {
+        // 3. Simpan meta (salt) ke IndexedDB lokal
+        await dbSet('meta', cloudData.meta);
+        return true;
+      }
+    }
+    return false;
+  } catch (e) {
+    console.error("Gagal sinkronisasi meta:", e);
+    return false;
   }
 }
 
@@ -295,7 +333,6 @@ async function unlockVault() {
 
   if (!email || !pass) { errEl.textContent = 'Email dan Master Password wajib diisi.'; return; }
   
-  // Cek apakah library Firebase sudah termuat
   if (!window.firebaseFunctions) {
     errEl.textContent = 'Sistem autentikasi belum siap. Coba refresh halaman.';
     return;
@@ -305,31 +342,56 @@ async function unlockVault() {
   const { createUserWithEmailAndPassword, signInWithEmailAndPassword } = window.firebaseFunctions;
   const auth = window.firebaseAuth;
 
-  // SKENARIO 1: Belum ada data lokal -> Daftar Akun Baru
+  // --- SKENARIO 1: DAFTAR AKUN BARU ---
   if (!meta) {
     if (pass !== confirmPass) { errEl.textContent = 'Konfirmasi tidak cocok!'; return; }
     if (pass.length < 8) { errEl.textContent = 'Minimal 8 karakter.'; return; }
     
     try {
-      // Daftarkan ke Firebase
+      // 1. Daftarkan ke Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       const user = userCredential.user;
       
-      // Buat kunci enkripsi dari Master Password
+      // 2. Buat salt baru
       const salt = crypto.getRandomValues(new Uint8Array(16));
       vaultSalt = salt;
       vaultKey = await deriveKey(pass, salt);
       vaultData = [];
       
-      // Simpan metadata (salt & iterasi) ke lokal
-      await dbSet('meta', { salt: bufToB64(salt), iterations: 600000 });
-      await saveVault(); 
+      // 3. Simpan meta (salt) ke IndexedDB lokal
+      const metaData = { salt: bufToB64(salt), iterations: 600000 };
+      await dbSet('meta', metaData);
       
+      // 4. Simpan meta (salt) ke Firestore Cloud
+      const { doc, setDoc } = window.firebaseFunctions;
+      const db = window.firebaseDb;
+      await setDoc(doc(db, "vaults", user.uid), {
+        meta: metaData, // <-- Salt disimpan ke Cloud
+        data: null,     // Data brankas kosong di awal
+        updatedAt: new Date().toISOString()
+      });
+
       showApp();
       showToast('Akun dan Brankas berhasil dibuat');
     } catch (error) {
       if (error.code === 'auth/email-already-in-use') {
-        errEl.textContent = 'Email sudah terdaftar. Silakan gunakan email lain atau login.';
+        // JIKA EMAIL SUDAH ADA: Coba tarik meta (salt) dari Cloud secara diam-diam
+        errEl.textContent = 'Email terdeteksi di Cloud. Menarik data...';
+        
+        const success = await syncMetaFromCloud(email, pass);
+        
+        if (success) {
+          showToast('Data berhasil ditarik. Membuka brankas...', 'success');
+          // Setelah meta ditarik, panggil unlockVault lagi (sekarang meta sudah ada di lokal)
+          setTimeout(() => unlockVault(), 1000);
+        } else {
+          document.getElementById('lock-title').textContent = 'Buka Kelapa Hijau';
+          document.getElementById('lock-sub').textContent = 'Email terdeteksi. Silakan klik tombol untuk Login.';
+          document.getElementById('confirm-group').style.display = 'none';
+          document.getElementById('unlock-btn-text').textContent = 'Login Brankas';
+          errEl.textContent = 'Email terdaftar, tapi password salah atau data cloud tidak ditemukan.';
+          recordFailure();
+        }
       } else {
         errEl.textContent = 'Gagal mendaftar: ' + error.message;
       }
@@ -337,17 +399,14 @@ async function unlockVault() {
     return;
   }
 
-  // SKENARIO 2: Sudah ada data lokal -> Login
+  // --- SKENARIO 2: LOGIN (Sudah punya meta lokal) ---
   try {
-    // Login ke Firebase
     await signInWithEmailAndPassword(auth, email, pass);
     
-    // Turunkan kunci dan dekripsi data
     vaultSalt = b64ToBuf(meta.salt);
     vaultKey = await deriveKey(pass, vaultSalt, meta.iterations);
     
     let stored = await dbGet('vault');
-    // Jika data lokal kosong, coba ambil dari Firestore
     if (!stored && currentUser) {
       stored = await loadFromFirestore();
       if (stored) await dbSet('vault', stored);
