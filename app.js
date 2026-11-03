@@ -285,7 +285,7 @@ document.addEventListener('visibilitychange', () => {
     hiddenTimer = setTimeout(() => {
       showToast('Brankas dikunci karena tab tidak aktif', 'warn');
       lockVault();
-    }, 5000);
+    }, 30000);
   } else {
     clearTimeout(hiddenTimer);
   }
@@ -1080,24 +1080,4 @@ window.addEventListener('load', () => {
 
   document.getElementById('import-file').addEventListener('change', importVault);
   document.getElementById('csv-file').addEventListener('change', importCSV);
-});
-// ==========================================
-// EVENT DELEGATION UNTUK TOMBOL DI DALAM LIST
-// ==========================================
-document.getElementById('password-list').addEventListener('click', (e) => {
-  // Cari tombol terdekat yang memiliki atribut data-action
-  const btn = e.target.closest('button[data-action]');
-  if (!btn) return;
-
-  const action = btn.dataset.action;
-  const id = btn.dataset.id;
-
-  // Panggil fungsi yang sesuai berdasarkan data-action
-  switch (action) {
-    case 'favorite': toggleFavorite(id); break;
-    case 'copy-pass': copyPass(id); break;
-    case 'edit': editEntry(id); break;
-    case 'delete': deleteEntry(id); break;
-    case 'copy-totp': copyTotp(id); break;
-  }
 });
