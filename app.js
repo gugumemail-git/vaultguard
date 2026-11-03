@@ -531,12 +531,12 @@ function renderList() {
     const strength = passwordStrength(e.pass);
     const isOld = (Date.now() - (e.updated || e.created || 0)) > oneYear;
     const totpBlock = e.totpSecret ? `
-      <div class="totp-container" data-totp-id="${e.id}">
-        <span class="totp-code" id="totp-code-${e.id}">······</span>
-        <span class="totp-timer" id="totp-timer-${e.id}">30s</span>
-        <button class="totp-copy-btn" onclick="copyTotp('${e.id}')" title="Salin kode TOTP">📋</button>
+      <div class="totp-container" data-totp-id="${escapeHtml(e.id)}">
+        <span class="totp-code" id="totp-code-${escapeHtml(e.id)}">······</span>
+        <span class="totp-timer" id="totp-timer-${escapeHtml(e.id)}">30s</span>
+        <button class="totp-copy-btn" data-action="copy-totp" data-id="${escapeHtml(e.id)}" title="Salin kode TOTP">📋</button>
       </div>
-      <div class="totp-bar"><div class="totp-bar-fill" id="totp-bar-${e.id}" style="width:100%"></div></div>
+      <div class="totp-bar"><div class="totp-bar-fill" id="totp-bar-${escapeHtml(e.id)}" style="width:100%"></div></div>
     ` : '';
     return `
       <div class="password-item" style="animation-delay:${i*0.04}s">
@@ -557,10 +557,10 @@ function renderList() {
         <div class="item-password">••••••••••</div>
         <span class="strength-badge ${strength}">${labels[strength]}</span>
         <div class="item-actions">
-          <button class="icon-btn star ${e.favorite ? 'active' : ''}" onclick="toggleFavorite('${e.id}')" title="Favorit" aria-label="Tandai favorit">${e.favorite ? '★' : '☆'}</button>
-          <button class="icon-btn" onclick="copyPass('${e.id}')" title="Salin password" aria-label="Salin password">📋</button>
-          <button class="icon-btn" onclick="editEntry('${e.id}')" title="Edit" aria-label="Edit">✏️</button>
-          <button class="icon-btn danger" onclick="deleteEntry('${e.id}')" title="Hapus" aria-label="Hapus">🗑️</button>
+          <button class="icon-btn star ${e.favorite ? 'active' : ''}" data-action="favorite" data-id="${escapeHtml(e.id)}" title="Favorit" aria-label="Tandai favorit">${e.favorite ? '★' : '☆'}</button>
+          <button class="icon-btn" data-action="copy-pass" data-id="${escapeHtml(e.id)}" title="Salin password" aria-label="Salin password">📋</button>
+          <button class="icon-btn" data-action="edit" data-id="${escapeHtml(e.id)}" title="Edit" aria-label="Edit">✏️</button>
+          <button class="icon-btn danger" data-action="delete" data-id="${escapeHtml(e.id)}" title="Hapus" aria-label="Hapus">🗑️</button>
         </div>
       </div>
     `;
@@ -1023,16 +1023,81 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// ---------- INIT ----------
+// (Opsional) Jika ingin digabung, jadinya seperti ini di paling bawah:
 window.addEventListener('load', () => {
+  // --- INISIALISASI ---
   initTheme();
-  initFirebaseAuth(); // Inisialisasi Firebase
+  initFirebaseAuth();
   checkSetup();
 
-  // --- DAFTARKAN SERVICE WORKER (FITUR PWA) ---
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js')
       .then(() => console.log('PWA Service Worker Berhasil Didaftarkan!'))
       .catch((err) => console.log('PWA Gagal:', err));
+  }
+
+  // --- EVENT LISTENERS TOMBOL ---
+  document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+  document.getElementById('unlock-btn').addEventListener('click', unlockVault);
+  document.querySelector('.btn-lock').addEventListener('click', lockVault);
+
+  document.querySelectorAll('.toggle-eye').forEach(btn => {
+    btn.addEventListener('click', function() {
+      if (this.closest('#lock-screen')) toggleMasterPass(this);
+      else toggleModalPass(this);
+    });
+  });
+
+  document.querySelector('.mobile-menu-btn').addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+  });
+  document.querySelector('.sidebar-backdrop').addEventListener('click', () => {
+    document.getElementById('sidebar').classList.remove('open');
+  });
+
+  document.getElementById('search-input').addEventListener('input', debouncedSearch);
+  document.querySelector('.btn-add').addEventListener('click', () => openModal());
+  
+  document.getElementById('btn-close-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+  document.getElementById('btn-save-entry').addEventListener('click', saveEntry);
+  
+  document.getElementById('in-pass').addEventListener('input', updateStrengthMeter);
+
+  document.getElementById('btn-gen-16').addEventListener('click', () => generatePassword(16));
+  document.getElementById('btn-gen-24').addEventListener('click', () => generatePassword(24));
+  document.getElementById('btn-gen-32').addEventListener('click', () => generatePassword(32));
+  document.getElementById('btn-gen-mnemonic').addEventListener('click', generateMnemonic);
+  document.getElementById('btn-gen-passphrase').addEventListener('click', generatePassphrase);
+  document.getElementById('btn-gen-totp').addEventListener('click', generateTotpSecret);
+  document.getElementById('btn-preview-totp').addEventListener('click', previewTotp);
+
+  document.getElementById('btn-export').addEventListener('click', exportVault);
+  document.getElementById('btn-import-vgvault').addEventListener('click', () => document.getElementById('import-file').click());
+  document.getElementById('btn-import-csv').addEventListener('click', () => document.getElementById('csv-file').click());
+  document.getElementById('btn-check-breach').addEventListener('click', checkAllBreaches);
+  document.getElementById('btn-wipe').addEventListener('click', wipeVault);
+
+  document.getElementById('import-file').addEventListener('change', importVault);
+  document.getElementById('csv-file').addEventListener('change', importCSV);
+});
+// ==========================================
+// EVENT DELEGATION UNTUK TOMBOL DI DALAM LIST
+// ==========================================
+document.getElementById('password-list').addEventListener('click', (e) => {
+  // Cari tombol terdekat yang memiliki atribut data-action
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+
+  const action = btn.dataset.action;
+  const id = btn.dataset.id;
+
+  // Panggil fungsi yang sesuai berdasarkan data-action
+  switch (action) {
+    case 'favorite': toggleFavorite(id); break;
+    case 'copy-pass': copyPass(id); break;
+    case 'edit': editEntry(id); break;
+    case 'delete': deleteEntry(id); break;
+    case 'copy-totp': copyTotp(id); break;
   }
 });

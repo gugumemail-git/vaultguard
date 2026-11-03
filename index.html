@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
-    <!-- CSP KETAT (Diperbarui untuk mengizinkan Firebase) -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.pwnedpasswords.com https://cdn.jsdelivr.net https://*.googleapis.com https://www.gstatic.com https://*.firebaseio.com wss://*.firebaseio.com; manifest-src 'self'; worker-src 'self';">
+    <!-- CSP KETAT -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.pwnedpasswords.com https://cdn.jsdelivr.net https://*.googleapis.com https://www.gstatic.com https://*.firebaseio.com wss://*.firebaseio.com; manifest-src 'self'; worker-src 'self';">
     
     <meta name="referrer" content="no-referrer">
     <title>Kelapa Hijau</title>
@@ -20,42 +20,13 @@
     <!-- Library TOTP -->
     <script src="https://cdn.jsdelivr.net/npm/otplib/dist/index.global.js"></script>
 
-    <!-- Firebase SDK (Modular) -->
-    <script type="module">
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
-      import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
-      import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
-
-      const firebaseConfig = {
-        apiKey: "AIzaSyBBQFmBvRlqWUvGzPlrCTDNYLVu2LikO0I",
-        authDomain: "kelapa-hijau.firebaseapp.com",
-        projectId: "kelapa-hijau",
-        storageBucket: "kelapa-hijau.firebasestorage.app",
-        messagingSenderId: "205794970428",
-        appId: "1:205794970428:web:d509f3005977c4c49aac39",
-        measurementId: "G-2K2LFL35BX"
-      };
-
-      const app = initializeApp(firebaseConfig);
-      const auth = getAuth(app);
-      const db = getFirestore(app);
-      
-      // Ekspos ke global window agar bisa diakses dari app.js
-      window.firebaseAuth = auth;
-      window.firebaseDb = db;
-      window.firebaseFunctions = { 
-        onAuthStateChanged, 
-        createUserWithEmailAndPassword, 
-        signInWithEmailAndPassword,
-        signOut,
-        doc, setDoc, getDoc 
-      };
-    </script>
+    <!-- Firebase SDK (Dipindahkan ke file eksternal) -->
+    <script src="firebase-init.js" type="module"></script>
 </head>
 <body>
 
 <!-- Theme toggle (global) -->
-<button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" aria-label="Ganti tema" title="Ganti tema (light/dark)">
+<button class="theme-toggle" id="theme-toggle" aria-label="Ganti tema" title="Ganti tema (light/dark)">
   <span id="theme-icon">🌙</span>
 </button>
 
@@ -66,7 +37,6 @@
     <h1 id="lock-title">Kelapa Hijau</h1>
     <p id="lock-sub">Siap hijaukan kebun anda</p>
     
-    <!-- FIELD EMAIL BARU -->
     <div class="input-group">
       <label for="master-email">Email Akun</label>
       <input type="email" id="master-email" placeholder="Masukkan email Anda" autocomplete="email">
@@ -75,13 +45,13 @@
     <div class="input-group">
       <label for="master-pass">Master Password</label>
       <input type="password" id="master-pass" placeholder="Masukkan master password" autocomplete="off" aria-required="true">
-      <button class="toggle-eye" onclick="toggleMasterPass(this)" aria-label="Tampilkan/sembunyikan password">👁</button>
+      <button class="toggle-eye" aria-label="Tampilkan/sembunyikan password">👁</button>
     </div>
     <div class="input-group" id="confirm-group" style="display:none;">
       <label for="confirm-pass">Konfirmasi Master Password</label>
       <input type="password" id="confirm-pass" placeholder="Ulangi master password" autocomplete="off">
     </div>
-    <button class="btn btn-primary" id="unlock-btn" onclick="unlockVault()">
+    <button class="btn btn-primary" id="unlock-btn">
       <span aria-hidden="true">🔓</span> <span id="unlock-btn-text">Buka Brankas</span>
     </button>
     <div class="auth-error" id="auth-error" role="alert"></div>
@@ -132,17 +102,17 @@
         </div>
         <div class="score-bar"><div class="score-bar-fill" id="score-bar"></div></div>
       </div>
-      <button class="btn-lock" onclick="lockVault()">
+      <button class="btn-lock">
         <span aria-hidden="true">🔒</span> Kunci Brankas
       </button>
     </div>
   </aside>
-  <div class="sidebar-backdrop" onclick="document.getElementById('sidebar').classList.remove('open')"></div>
+  <div class="sidebar-backdrop"></div>
 
   <main class="main">
     <div class="header">
       <div class="header-left">
-        <button class="mobile-menu-btn" onclick="document.getElementById('sidebar').classList.toggle('open')" aria-label="Buka menu">☰</button>
+        <button class="mobile-menu-btn" aria-label="Buka menu">☰</button>
         <div>
           <h2>Password Saya</h2>
           <p id="header-sub">Kelola semua kredensial Anda dengan aman</p>
@@ -151,9 +121,9 @@
       <div style="display:flex; gap:12px; align-items:center; flex:1; justify-content:flex-end; flex-wrap:wrap;">
         <div class="search-bar">
           <span class="search-icon" aria-hidden="true">🔍</span>
-          <input type="text" id="search-input" placeholder="Cari password..." oninput="debouncedSearch()" aria-label="Cari password">
+          <input type="text" id="search-input" placeholder="Cari password..." aria-label="Cari password">
         </div>
-        <button class="btn-add" onclick="openModal()">
+        <button class="btn-add">
           <span aria-hidden="true">+</span> Tambah
         </button>
       </div>
@@ -183,13 +153,13 @@
     </div>
 
     <div class="toolbar">
-      <button class="toolbar-btn" onclick="exportVault()">📥 Export .vgvault</button>
-      <button class="toolbar-btn" onclick="document.getElementById('import-file').click()">📤 Import .vgvault</button>
-      <input type="file" id="import-file" accept=".vgvault,.json" style="display:none" onchange="importVault(event)">
-      <button class="toolbar-btn" onclick="document.getElementById('csv-file').click()">📊 Import CSV</button>
-      <input type="file" id="csv-file" accept=".csv" style="display:none" onchange="importCSV(event)">
-      <button class="toolbar-btn" onclick="checkAllBreaches()">🛡️ Cek Breach (HIBP)</button>
-      <button class="toolbar-btn danger" onclick="wipeVault()">🗑️ Hapus Semua</button>
+      <button class="toolbar-btn" id="btn-export">📥 Export .vgvault</button>
+      <button class="toolbar-btn" id="btn-import-vgvault">📤 Import .vgvault</button>
+      <input type="file" id="import-file" accept=".vgvault,.json" style="display:none">
+      <button class="toolbar-btn" id="btn-import-csv">📊 Import CSV</button>
+      <input type="file" id="csv-file" accept=".csv" style="display:none">
+      <button class="toolbar-btn" id="btn-check-breach">🛡️ Cek Breach (HIBP)</button>
+      <button class="toolbar-btn danger" id="btn-wipe">🗑️ Hapus Semua</button>
     </div>
 
     <div class="list-header">
@@ -204,7 +174,7 @@
   <div class="modal">
     <div class="modal-header">
       <h3 id="modal-title">Tambah Password Baru</h3>
-      <button class="icon-btn" onclick="closeModal()" aria-label="Tutup">✕</button>
+      <button class="icon-btn" id="btn-close-modal" aria-label="Tutup">✕</button>
     </div>
     <div class="input-group">
       <label for="in-site">Nama Situs / Layanan</label>
@@ -220,14 +190,14 @@
     </div>
     <div class="input-group">
       <label for="in-pass">Password</label>
-      <input type="text" id="in-pass" class="with-btn" placeholder="Masukkan atau generate password" oninput="updateStrengthMeter()">
-      <button class="toggle-eye" onclick="toggleModalPass(this)" aria-label="Tampilkan/sembunyikan">👁</button>
+      <input type="text" id="in-pass" class="with-btn" placeholder="Masukkan atau generate password">
+      <button class="toggle-eye" aria-label="Tampilkan/sembunyikan">👁</button>
       <div class="password-gen-row">
-        <button class="btn-gen" onclick="generatePassword(16)">⚡ 16</button>
-        <button class="btn-gen" onclick="generatePassword(24)">⚡ 24</button>
-        <button class="btn-gen" onclick="generatePassword(32)">⚡ 32</button>
-        <button class="btn-gen" onclick="generateMnemonic()">🧠 Mnemonic</button>
-        <button class="btn-gen" onclick="generatePassphrase()">📝 Passphrase</button>
+        <button class="btn-gen" id="btn-gen-16">⚡ 16</button>
+        <button class="btn-gen" id="btn-gen-24">⚡ 24</button>
+        <button class="btn-gen" id="btn-gen-32">⚡ 32</button>
+        <button class="btn-gen" id="btn-gen-mnemonic">🧠 Mnemonic</button>
+        <button class="btn-gen" id="btn-gen-passphrase">📝 Passphrase</button>
       </div>
       <div class="gen-options">
         <label><input type="checkbox" id="opt-symbols" checked> Simbol (!@#$)</label>
@@ -261,14 +231,14 @@
       <label for="in-totp">TOTP Secret (opsional, untuk 2FA)</label>
       <input type="text" id="in-totp" placeholder="Base32 secret (contoh: JBSWY3DPEHPK3PXP)">
       <div style="margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap;">
-        <button type="button" class="btn-gen" onclick="generateTotpSecret()">🔑 Generate Secret</button>
-        <button type="button" class="btn-gen" onclick="previewTotp()">👁 Preview Kode</button>
+        <button type="button" class="btn-gen" id="btn-gen-totp">🔑 Generate Secret</button>
+        <button type="button" class="btn-gen" id="btn-preview-totp">👁 Preview Kode</button>
       </div>
       <div id="totp-preview" style="display: none; margin-top: 8px;"></div>
     </div>
     <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeModal()">Batal</button>
-      <button class="btn-save" onclick="saveEntry()">💾 Simpan</button>
+      <button class="btn-cancel" id="btn-cancel-modal">Batal</button>
+      <button class="btn-save" id="btn-save-entry">💾 Simpan</button>
     </div>
   </div>
 </div>
