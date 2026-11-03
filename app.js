@@ -285,7 +285,7 @@ document.addEventListener('visibilitychange', () => {
     hiddenTimer = setTimeout(() => {
       showToast('Brankas dikunci karena tab tidak aktif', 'warn');
       lockVault();
-    }, 5000);
+    }, 30000);
   } else {
     clearTimeout(hiddenTimer);
   }
