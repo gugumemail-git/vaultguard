@@ -14,8 +14,9 @@ function initTheme() {
 }
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
-  document.getElementById('theme-icon').textContent = theme === 'light' ? '☀️' : '🌙';
+  document.getElementById('theme-icon').innerHTML = theme === 'light' ? '<i data-lucide="sun"></i>' : '<i data-lucide="moon"></i>';
   document.getElementById('theme-toggle').setAttribute('aria-pressed', theme === 'light');
+  if (window.lucide) lucide.createIcons();
 }
 function toggleTheme() {
   const current = document.documentElement.getAttribute('data-theme');
@@ -72,14 +73,13 @@ async function saveToFirestore(encryptedData) {
   const db = window.firebaseDb;
   
   try {
-    // Ambil meta lokal untuk memastikan salt selalu ada di cloud
     const localMeta = await dbGet('meta');
     
     await setDoc(doc(db, "vaults", currentUser.uid), {
-      meta: localMeta, // <-- Simpan salt ke cloud setiap kali menyimpan
+      meta: localMeta,
       data: encryptedData,
       updatedAt: new Date().toISOString()
-    }, { merge: true }); // merge: true agar tidak menimpa field lain
+    }, { merge: true });
   } catch (e) {
     console.error("Firestore Save Error:", e);
     showToast("Gagal sinkronisasi ke Cloud", "error");
@@ -96,7 +96,6 @@ async function loadFromFirestore() {
     if (docSnap.exists()) {
       const cloudData = docSnap.data();
       
-      // JIKA DI CLOUD ADA META (SALT) DAN DI LOKAL KOSONG, SIMPAN KE LOKAL
       if (cloudData.meta && !(await dbGet('meta'))) {
         await dbSet('meta', cloudData.meta);
         vaultSalt = b64ToBuf(cloudData.meta.salt);
@@ -116,16 +115,13 @@ async function syncMetaFromCloud(email, pass) {
   const db = window.firebaseDb;
 
   try {
-    // 1. Login ke Firebase dulu untuk mendapatkan UID
     const userCredential = await signInWithEmailAndPassword(auth, email, pass);
     const user = userCredential.user;
 
-    // 2. Tarik dokumen dari Firestore
     const docSnap = await getDoc(doc(db, "vaults", user.uid));
     if (docSnap.exists()) {
       const cloudData = docSnap.data();
       if (cloudData.meta) {
-        // 3. Simpan meta (salt) ke IndexedDB lokal
         await dbSet('meta', cloudData.meta);
         return true;
       }
@@ -219,8 +215,10 @@ function showToast(msg, type = 'success') {
   const c = document.getElementById('toast-container');
   const t = document.createElement('div');
   t.className = 'toast' + (type === 'error' ? ' error' : type === 'warn' ? ' warn' : '');
-  t.innerHTML = `<span aria-hidden="true">${type === 'error' ? '❌' : type === 'warn' ? '⚠️' : '✅'}</span> ${escapeHtml(msg)}`;
+  const icon = type === 'error' ? 'x-circle' : type === 'warn' ? 'alert-triangle' : 'check-circle';
+  t.innerHTML = `<i data-lucide="${icon}"></i> ${escapeHtml(msg)}`;
   c.appendChild(t);
+  if (window.lucide) lucide.createIcons();
   setTimeout(() => {
     t.style.opacity = '0'; t.style.transform = 'translateX(50px)';
     setTimeout(() => t.remove(), 300);
@@ -306,6 +304,7 @@ function recordFailure() {
   }
 }
 function resetFailures() { failedAttempts = 0; lockoutUntil = 0; }
+
 // ---------- AUTH ----------
 async function checkSetup() {
   const meta = await dbGet('meta');
@@ -342,32 +341,27 @@ async function unlockVault() {
   const { createUserWithEmailAndPassword, signInWithEmailAndPassword } = window.firebaseFunctions;
   const auth = window.firebaseAuth;
 
-  // --- SKENARIO 1: DAFTAR AKUN BARU ---
   if (!meta) {
     if (pass !== confirmPass) { errEl.textContent = 'Konfirmasi tidak cocok!'; return; }
     if (pass.length < 8) { errEl.textContent = 'Minimal 8 karakter.'; return; }
     
     try {
-      // 1. Daftarkan ke Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       const user = userCredential.user;
       
-      // 2. Buat salt baru
       const salt = crypto.getRandomValues(new Uint8Array(16));
       vaultSalt = salt;
       vaultKey = await deriveKey(pass, salt);
       vaultData = [];
       
-      // 3. Simpan meta (salt) ke IndexedDB lokal
       const metaData = { salt: bufToB64(salt), iterations: 600000 };
       await dbSet('meta', metaData);
       
-      // 4. Simpan meta (salt) ke Firestore Cloud
       const { doc, setDoc } = window.firebaseFunctions;
       const db = window.firebaseDb;
       await setDoc(doc(db, "vaults", user.uid), {
-        meta: metaData, // <-- Salt disimpan ke Cloud
-        data: null,     // Data brankas kosong di awal
+        meta: metaData,
+        data: null,
         updatedAt: new Date().toISOString()
       });
 
@@ -375,14 +369,12 @@ async function unlockVault() {
       showToast('Akun dan Brankas berhasil dibuat');
     } catch (error) {
       if (error.code === 'auth/email-already-in-use') {
-        // JIKA EMAIL SUDAH ADA: Coba tarik meta (salt) dari Cloud secara diam-diam
         errEl.textContent = 'Email terdeteksi di Cloud. Menarik data...';
         
         const success = await syncMetaFromCloud(email, pass);
         
         if (success) {
           showToast('Data berhasil ditarik. Membuka brankas...', 'success');
-          // Setelah meta ditarik, panggil unlockVault lagi (sekarang meta sudah ada di lokal)
           setTimeout(() => unlockVault(), 1000);
         } else {
           document.getElementById('lock-title').textContent = 'Buka Kelapa Hijau';
@@ -399,7 +391,6 @@ async function unlockVault() {
     return;
   }
 
-  // --- SKENARIO 2: LOGIN (Sudah punya meta lokal) ---
   try {
     await signInWithEmailAndPassword(auth, email, pass);
     
@@ -454,10 +445,8 @@ async function saveVault() {
   if (!vaultKey) return;
   const enc = await encryptVault(vaultData, vaultKey);
   
-  // Selalu simpan ke lokal
   await dbSet('vault', enc);
   
-  // Sinkronkan ke Firebase jika memungkinkan
   if (currentUser) {
     await saveToFirestore(enc);
   }
@@ -522,7 +511,8 @@ function renderList() {
   document.getElementById('list-title').textContent = titles[currentFilter];
 
   if (filtered.length === 0) {
-    listEl.innerHTML = `<div class="empty-state"><div class="emoji" aria-hidden="true">🔍</div><p>Tidak ada password ditemukan</p></div>`;
+    listEl.innerHTML = `<div class="empty-state"><div class="emoji" aria-hidden="true"><i data-lucide="search-x"></i></div><p>Tidak ada password ditemukan</p></div>`;
+    if (window.lucide) lucide.createIcons();
     return;
   }
   const labels = { strong: 'Kuat', medium: 'Sedang', weak: 'Lemah' };
@@ -534,7 +524,7 @@ function renderList() {
       <div class="totp-container" data-totp-id="${escapeHtml(e.id)}">
         <span class="totp-code" id="totp-code-${escapeHtml(e.id)}">······</span>
         <span class="totp-timer" id="totp-timer-${escapeHtml(e.id)}">30s</span>
-        <button class="totp-copy-btn" data-action="copy-totp" data-id="${escapeHtml(e.id)}" title="Salin kode TOTP">📋</button>
+        <button class="totp-copy-btn" data-action="copy-totp" data-id="${escapeHtml(e.id)}" title="Salin kode TOTP"><i data-lucide="copy"></i></button>
       </div>
       <div class="totp-bar"><div class="totp-bar-fill" id="totp-bar-${escapeHtml(e.id)}" style="width:100%"></div></div>
     ` : '';
@@ -543,13 +533,13 @@ function renderList() {
         <div class="site-icon" style="background:${escapeHtml(e.color || '#4f8cff')}">${escapeHtml(getInitials(e.site))}</div>
         <div class="item-info">
           <div class="site-name">
-            ${e.favorite ? '<span class="fav" aria-label="Favorit">★</span>' : ''}
+            ${e.favorite ? '<span class="fav" aria-label="Favorit"><i data-lucide="star" style="fill: currentColor; width: 16px; height: 16px;"></i></span>' : ''}
             ${escapeHtml(e.site)}
           </div>
           <div class="username">${escapeHtml(e.user || '—')}</div>
           ${(e.tags && e.tags.length) || isOld || e.breached ? `<div class="tags">
-            ${e.breached ? '<span class="tag breached">⚠ Bocor</span>' : ''}
-            ${isOld ? '<span class="tag old">⏰ Lama</span>' : ''}
+            ${e.breached ? '<span class="tag breached"><i data-lucide="alert-triangle" style="width:12px;height:12px;margin-right:4px;"></i> Bocor</span>' : ''}
+            ${isOld ? '<span class="tag old"><i data-lucide="clock" style="width:12px;height:12px;margin-right:4px;"></i> Lama</span>' : ''}
             ${(e.tags || []).map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}
           </div>` : ''}
           ${totpBlock}
@@ -557,15 +547,18 @@ function renderList() {
         <div class="item-password">••••••••••</div>
         <span class="strength-badge ${strength}">${labels[strength]}</span>
         <div class="item-actions">
-          <button class="icon-btn star ${e.favorite ? 'active' : ''}" data-action="favorite" data-id="${escapeHtml(e.id)}" title="Favorit" aria-label="Tandai favorit">${e.favorite ? '★' : '☆'}</button>
-          <button class="icon-btn" data-action="copy-pass" data-id="${escapeHtml(e.id)}" title="Salin password" aria-label="Salin password">📋</button>
-          <button class="icon-btn" data-action="edit" data-id="${escapeHtml(e.id)}" title="Edit" aria-label="Edit">✏️</button>
-          <button class="icon-btn danger" data-action="delete" data-id="${escapeHtml(e.id)}" title="Hapus" aria-label="Hapus">🗑️</button>
+          <button class="icon-btn star ${e.favorite ? 'active' : ''}" data-action="favorite" data-id="${escapeHtml(e.id)}" title="Favorit" aria-label="Tandai favorit">
+            <i data-lucide="star" ${e.favorite ? 'style="fill: currentColor;"' : ''}></i>
+          </button>
+          <button class="icon-btn" data-action="copy-pass" data-id="${escapeHtml(e.id)}" title="Salin password" aria-label="Salin password"><i data-lucide="clipboard-copy"></i></button>
+          <button class="icon-btn" data-action="edit" data-id="${escapeHtml(e.id)}" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></button>
+          <button class="icon-btn danger" data-action="delete" data-id="${escapeHtml(e.id)}" title="Hapus" aria-label="Hapus"><i data-lucide="trash-2"></i></button>
         </div>
       </div>
     `;
   }).join('');
   fillAllTotp();
+  if (window.lucide) lucide.createIcons(); // Render ikon untuk item list yang baru dibuat
 }
 
 function getInitials(site) {
@@ -644,13 +637,15 @@ function closeModal() {
 function toggleMasterPass(btn) {
   const input = btn.previousElementSibling;
   input.type = input.type === 'password' ? 'text' : 'password';
-  btn.textContent = input.type === 'password' ? '👁' : '🙈';
+  btn.innerHTML = input.type === 'password' ? '<i data-lucide="eye"></i>' : '<i data-lucide="eye-off"></i>';
+  if (window.lucide) lucide.createIcons();
 }
 
 function toggleModalPass(btn) {
   const input = btn.previousElementSibling;
   input.type = input.type === 'password' ? 'text' : 'password';
-  btn.textContent = input.type === 'password' ? '👁' : '🙈';
+  btn.innerHTML = input.type === 'password' ? '<i data-lucide="eye"></i>' : '<i data-lucide="eye-off"></i>';
+  if (window.lucide) lucide.createIcons();
 }
 
 // ---------- GENERATORS ----------
@@ -707,10 +702,10 @@ function generatePassphrase() {
   updateStrengthMeter();
   showToast(`Passphrase: ${pass}`);
 }
+
 // ---------- TOTP ----------
 function generateTotpSecret() {
   try {
-    // Menggunakan API standar otplib v13
     const secret = otplib.generateSecret();
     document.getElementById('in-totp').value = secret;
     showToast('Secret TOTP dibuat. Simpan di authenticator app Anda.');
@@ -725,7 +720,6 @@ async function previewTotp() {
   const previewEl = document.getElementById('totp-preview');
   if (!secret) { previewEl.style.display = 'none'; return; }
   try {
-    // otplib v13 menggunakan async generate()
     const code = await otplib.generate({ secret });
     previewEl.innerHTML = `
       <div class="totp-container">
@@ -1023,9 +1017,11 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// (Opsional) Jika ingin digabung, jadinya seperti ini di paling bawah:
 window.addEventListener('load', () => {
-  // --- INISIALISASI ---
+  // --- INISIALISASI IKON ---
+  if (window.lucide) lucide.createIcons();
+
+  // --- INISIALISASI LAINNYA ---
   initTheme();
   initFirebaseAuth();
   checkSetup();
@@ -1081,18 +1077,17 @@ window.addEventListener('load', () => {
   document.getElementById('import-file').addEventListener('change', importVault);
   document.getElementById('csv-file').addEventListener('change', importCSV);
 });
+
 // ==========================================
 // EVENT DELEGATION UNTUK TOMBOL DI DALAM LIST
 // ==========================================
 document.getElementById('password-list').addEventListener('click', (e) => {
-  // Cari tombol terdekat yang memiliki atribut data-action
   const btn = e.target.closest('button[data-action]');
   if (!btn) return;
 
   const action = btn.dataset.action;
   const id = btn.dataset.id;
 
-  // Panggil fungsi yang sesuai berdasarkan data-action
   switch (action) {
     case 'favorite': toggleFavorite(id); break;
     case 'copy-pass': copyPass(id); break;

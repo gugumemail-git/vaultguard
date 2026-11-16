@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
     <!-- CSP KETAT -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.pwnedpasswords.com https://cdn.jsdelivr.net https://*.googleapis.com https://www.gstatic.com https://*.firebaseio.com wss://*.firebaseio.com; manifest-src 'self'; worker-src 'self';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.pwnedpasswords.com https://cdn.jsdelivr.net https://unpkg.com https://*.googleapis.com https://www.gstatic.com https://*.firebaseio.com wss://*.firebaseio.com; manifest-src 'self'; worker-src 'self';">
     
     <meta name="referrer" content="no-referrer">
     <title>Kelapa Hijau</title>
@@ -20,20 +20,54 @@
     <!-- Library TOTP -->
     <script src="https://cdn.jsdelivr.net/npm/otplib/dist/index.global.js"></script>
 
+    <!-- Library Lucide Icons (Modern Outline) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
     <!-- Firebase SDK (Dipindahkan ke file eksternal) -->
     <script src="firebase-init.js" type="module"></script>
+
+    <!-- TAMBAHAN CSS UNTUK LUCIDE ICONS (Agar tidak perlu edit style.css) -->
+    <style>
+        [data-lucide] {
+            width: 20px;
+            height: 20px;
+            stroke-width: 2;
+            vertical-align: middle;
+        }
+        .brand-icon [data-lucide] {
+            width: 28px;
+            height: 28px;
+        }
+        .stat-card .icon [data-lucide] {
+            width: 24px;
+            height: 24px;
+        }
+        .toolbar-btn [data-lucide],
+        .btn-gen [data-lucide] {
+            width: 16px;
+            height: 16px;
+            margin-right: 6px;
+        }
+        .nav-item [data-lucide] {
+            margin-right: 12px;
+        }
+        .item-actions [data-lucide] {
+            width: 18px;
+            height: 18px;
+        }
+    </style>
 </head>
 <body>
 
 <!-- Theme toggle (global) -->
 <button class="theme-toggle" id="theme-toggle" aria-label="Ganti tema" title="Ganti tema (light/dark)">
-  <span id="theme-icon">🌙</span>
+  <span id="theme-icon"><i data-lucide="moon"></i></span>
 </button>
 
 <!-- LOCK SCREEN -->
 <div id="lock-screen" role="main" aria-label="Layar buka brankas">
   <div class="lock-card">
-    <div class="lock-icon" aria-hidden="true">🥥</div>
+    <div class="lock-icon" aria-hidden="true"><i data-lucide="shield-check" style="width: 48px; height: 48px;"></i></div>
     <h1 id="lock-title">Kelapa Hijau</h1>
     <p id="lock-sub">Siap hijaukan kebun anda</p>
     
@@ -45,14 +79,14 @@
     <div class="input-group">
       <label for="master-pass">Master Password</label>
       <input type="password" id="master-pass" placeholder="Masukkan master password" autocomplete="off" aria-required="true">
-      <button class="toggle-eye" aria-label="Tampilkan/sembunyikan password">👁</button>
+      <button class="toggle-eye" aria-label="Tampilkan/sembunyikan password"><i data-lucide="eye"></i></button>
     </div>
     <div class="input-group" id="confirm-group" style="display:none;">
       <label for="confirm-pass">Konfirmasi Master Password</label>
       <input type="password" id="confirm-pass" placeholder="Ulangi master password" autocomplete="off">
     </div>
     <button class="btn btn-primary" id="unlock-btn">
-      <span aria-hidden="true">🔓</span> <span id="unlock-btn-text">Buka Brankas</span>
+      <i data-lucide="unlock"></i> <span id="unlock-btn-text">Buka Brankas</span>
     </button>
     <div class="auth-error" id="auth-error" role="alert"></div>
     <div class="rate-limit-info" id="rate-limit-info" role="status"></div>
@@ -67,31 +101,31 @@
 <div id="app">
   <aside class="sidebar" id="sidebar" aria-label="Navigasi utama">
     <div class="brand">
-      <div class="brand-icon" aria-hidden="true">🔐</div>
+      <div class="brand-icon" aria-hidden="true"><i data-lucide="shield-check"></i></div>
       <div>
         <div class="brand-name">Kelapa Hijau</div>
         <div class="brand-sub">AES-256 Encrypted</div>
       </div>
     </div>
     <button class="nav-item active" data-filter="all">
-      <span class="icon" aria-hidden="true">🗝️</span> Semua Password
+      <i data-lucide="key" class="icon"></i> Semua Password
       <span class="badge" id="nav-count">0</span>
     </button>
     <button class="nav-item" data-filter="favorite">
-      <span class="icon" aria-hidden="true">⭐</span> Favorit
+      <i data-lucide="star" class="icon"></i> Favorit
     </button>
     <button class="nav-item" data-filter="strong">
-      <span class="icon" aria-hidden="true">🛡️</span> Kuat
+      <i data-lucide="shield" class="icon"></i> Kuat
     </button>
     <button class="nav-item" data-filter="weak">
-      <span class="icon" aria-hidden="true">⚠️</span> Lemah
+      <i data-lucide="alert-triangle" class="icon"></i> Lemah
       <span class="badge" id="nav-weak">0</span>
     </button>
     <button class="nav-item" data-filter="duplicate">
-      <span class="icon" aria-hidden="true">🔄</span> Duplikat
+      <i data-lucide="copy" class="icon"></i> Duplikat
     </button>
     <button class="nav-item" data-filter="old">
-      <span class="icon" aria-hidden="true">⏰</span> Lama (&gt;1 thn)
+      <i data-lucide="clock" class="icon"></i> Lama (&gt;1 thn)
     </button>
     <div class="sidebar-footer">
       <div class="security-score">
@@ -103,7 +137,7 @@
         <div class="score-bar"><div class="score-bar-fill" id="score-bar"></div></div>
       </div>
       <button class="btn-lock">
-        <span aria-hidden="true">🔒</span> Kunci Brankas
+        <i data-lucide="lock"></i> Kunci Brankas
       </button>
     </div>
   </aside>
@@ -112,7 +146,7 @@
   <main class="main">
     <div class="header">
       <div class="header-left">
-        <button class="mobile-menu-btn" aria-label="Buka menu">☰</button>
+        <button class="mobile-menu-btn" aria-label="Buka menu"><i data-lucide="menu"></i></button>
         <div>
           <h2>Password Saya</h2>
           <p id="header-sub">Kelola semua kredensial Anda dengan aman</p>
@@ -120,46 +154,46 @@
       </div>
       <div style="display:flex; gap:12px; align-items:center; flex:1; justify-content:flex-end; flex-wrap:wrap;">
         <div class="search-bar">
-          <span class="search-icon" aria-hidden="true">🔍</span>
+          <span class="search-icon" aria-hidden="true"><i data-lucide="search"></i></span>
           <input type="text" id="search-input" placeholder="Cari password..." aria-label="Cari password">
         </div>
         <button class="btn-add">
-          <span aria-hidden="true">+</span> Tambah
+          <i data-lucide="plus"></i> Tambah
         </button>
       </div>
     </div>
 
     <div class="stats-row">
       <div class="stat-card">
-        <div class="icon blue" aria-hidden="true">🗝️</div>
+        <div class="icon blue" aria-hidden="true"><i data-lucide="key"></i></div>
         <div class="value" id="stat-total">0</div>
         <div class="label">Total Password</div>
       </div>
       <div class="stat-card">
-        <div class="icon green" aria-hidden="true">🛡️</div>
+        <div class="icon green" aria-hidden="true"><i data-lucide="shield-check"></i></div>
         <div class="value" id="stat-strong">0</div>
         <div class="label">Kuat</div>
       </div>
       <div class="stat-card">
-        <div class="icon amber" aria-hidden="true">⚠️</div>
+        <div class="icon amber" aria-hidden="true"><i data-lucide="alert-triangle"></i></div>
         <div class="value" id="stat-medium">0</div>
         <div class="label">Sedang</div>
       </div>
       <div class="stat-card">
-        <div class="icon red" aria-hidden="true">🚨</div>
+        <div class="icon red" aria-hidden="true"><i data-lucide="alert-octagon"></i></div>
         <div class="value" id="stat-weak">0</div>
         <div class="label">Lemah</div>
       </div>
     </div>
 
     <div class="toolbar">
-      <button class="toolbar-btn" id="btn-export">📥 Export .vgvault</button>
-      <button class="toolbar-btn" id="btn-import-vgvault">📤 Import .vgvault</button>
+      <button class="toolbar-btn" id="btn-export"><i data-lucide="download"></i> Export .vgvault</button>
+      <button class="toolbar-btn" id="btn-import-vgvault"><i data-lucide="upload"></i> Import .vgvault</button>
       <input type="file" id="import-file" accept=".vgvault,.json" style="display:none">
-      <button class="toolbar-btn" id="btn-import-csv">📊 Import CSV</button>
+      <button class="toolbar-btn" id="btn-import-csv"><i data-lucide="file-spreadsheet"></i> Import CSV</button>
       <input type="file" id="csv-file" accept=".csv" style="display:none">
-      <button class="toolbar-btn" id="btn-check-breach">🛡️ Cek Breach (HIBP)</button>
-      <button class="toolbar-btn danger" id="btn-wipe">🗑️ Hapus Semua</button>
+      <button class="toolbar-btn" id="btn-check-breach"><i data-lucide="shield-alert"></i> Cek Breach (HIBP)</button>
+      <button class="toolbar-btn danger" id="btn-wipe"><i data-lucide="trash-2"></i> Hapus Semua</button>
     </div>
 
     <div class="list-header">
@@ -169,12 +203,13 @@
     <div class="password-list" id="password-list"></div>
   </main>
 </div>
+
 <!-- MODAL -->
 <div class="modal-overlay" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
   <div class="modal">
     <div class="modal-header">
       <h3 id="modal-title">Tambah Password Baru</h3>
-      <button class="icon-btn" id="btn-close-modal" aria-label="Tutup">✕</button>
+      <button class="icon-btn" id="btn-close-modal" aria-label="Tutup"><i data-lucide="x"></i></button>
     </div>
     <div class="input-group">
       <label for="in-site">Nama Situs / Layanan</label>
@@ -191,13 +226,13 @@
     <div class="input-group">
       <label for="in-pass">Password</label>
       <input type="text" id="in-pass" class="with-btn" placeholder="Masukkan atau generate password">
-      <button class="toggle-eye" aria-label="Tampilkan/sembunyikan">👁</button>
+      <button class="toggle-eye" aria-label="Tampilkan/sembunyikan"><i data-lucide="eye"></i></button>
       <div class="password-gen-row">
-        <button class="btn-gen" id="btn-gen-16">⚡ 16</button>
-        <button class="btn-gen" id="btn-gen-24">⚡ 24</button>
-        <button class="btn-gen" id="btn-gen-32">⚡ 32</button>
-        <button class="btn-gen" id="btn-gen-mnemonic">🧠 Mnemonic</button>
-        <button class="btn-gen" id="btn-gen-passphrase">📝 Passphrase</button>
+        <button class="btn-gen" id="btn-gen-16"><i data-lucide="zap"></i> 16</button>
+        <button class="btn-gen" id="btn-gen-24"><i data-lucide="zap"></i> 24</button>
+        <button class="btn-gen" id="btn-gen-32"><i data-lucide="zap"></i> 32</button>
+        <button class="btn-gen" id="btn-gen-mnemonic"><i data-lucide="brain"></i> Mnemonic</button>
+        <button class="btn-gen" id="btn-gen-passphrase"><i data-lucide="pencil-line"></i> Passphrase</button>
       </div>
       <div class="gen-options">
         <label><input type="checkbox" id="opt-symbols" checked> Simbol (!@#$)</label>
@@ -231,20 +266,20 @@
       <label for="in-totp">TOTP Secret (opsional, untuk 2FA)</label>
       <input type="text" id="in-totp" placeholder="Base32 secret (contoh: JBSWY3DPEHPK3PXP)">
       <div style="margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap;">
-        <button type="button" class="btn-gen" id="btn-gen-totp">🔑 Generate Secret</button>
-        <button type="button" class="btn-gen" id="btn-preview-totp">👁 Preview Kode</button>
+        <button type="button" class="btn-gen" id="btn-gen-totp"><i data-lucide="key-round"></i> Generate Secret</button>
+        <button type="button" class="btn-gen" id="btn-preview-totp"><i data-lucide="eye"></i> Preview Kode</button>
       </div>
       <div id="totp-preview" style="display: none; margin-top: 8px;"></div>
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" id="btn-cancel-modal">Batal</button>
-      <button class="btn-save" id="btn-save-entry">💾 Simpan</button>
+      <button class="btn-save" id="btn-save-entry"><i data-lucide="save"></i> Simpan</button>
     </div>
   </div>
 </div>
 
 <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div>
-<div class="idle-warning" id="idle-warning" role="alert">⏱️ Brankas akan terkunci dalam 30 detik...</div>
+<div class="idle-warning" id="idle-warning" role="alert"><i data-lucide="clock"></i> Brankas akan terkunci dalam 30 detik...</div>
 
 <!-- External JS -->
 <script src="app.js"></script>
