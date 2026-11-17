@@ -315,9 +315,9 @@ async function checkSetup() {
     document.getElementById('unlock-btn-text').textContent = 'Tanam Kelapa Hijau';
   } else {
     document.getElementById('lock-title').textContent = 'Kelapa Hijau';
-    document.getElementById('lock-sub').textContent = 'Brankas password terenkripsi Anda';
+    document.getElementById('lock-sub').textContent = 'Tanam kelapa hijau anda sekarang';
     document.getElementById('confirm-group').style.display = 'none';
-    document.getElementById('unlock-btn-text').textContent = 'Buka Brankas';
+    document.getElementById('unlock-btn-text').textContent = 'Buka Kebun';
   }
 }
 
